@@ -105,3 +105,4 @@ CLAUDE.md
 .claude/
 
 data/
+client/package-lock.json

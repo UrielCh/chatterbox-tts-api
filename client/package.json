@@ -7,6 +7,7 @@
   "types": "chatterbox-client.ts",
   "type": "module",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/node": "^25.9.1"
   }
 }
