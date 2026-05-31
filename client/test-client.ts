@@ -1,5 +1,5 @@
 import { ChatterboxClient } from "./chatterbox-client";
-import { write } from "bun";
+import { writeFile } from "node:fs/promises";
 
 async function main() {
   console.log("🚀 Initializing Chatterbox TTS Client...");
@@ -50,7 +50,8 @@ async function main() {
 
     // Save audio
     const outputPath = "./test-output.wav";
-    await write(outputPath, audioBlob);
+    const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
+    await writeFile(outputPath, audioBuffer);
     console.log(`💾 Saved test audio file to: ${outputPath}`);
 
   } catch (error) {
