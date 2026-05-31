@@ -54,8 +54,8 @@ async def initialize_model():
             raise FileNotFoundError(f"Voice sample not found: {Config.VOICE_SAMPLE_PATH}")
         
         _initialization_progress = "Configuring device compatibility..."
-        # Patch torch.load for CPU compatibility if needed
-        if _device == 'cpu':
+        # Patch torch.load for CPU/MPS compatibility if CUDA is not available
+        if _device in ('cpu', 'mps') or not torch.cuda.is_available():
             import torch
             original_load = torch.load
             original_load_file = None

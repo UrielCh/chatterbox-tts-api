@@ -21,6 +21,7 @@ dependencies = [
   "requests>=2.28.0",
   "sse-starlette>=3.0.2",
   "pydub>=0.25.1",
+  "setuptools<70",
 ]
 
 [project.urls]
