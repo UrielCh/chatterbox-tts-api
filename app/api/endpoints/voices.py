@@ -307,6 +307,61 @@ async def upload_voice(
 
 
 @router.get(
+    "/voices/all-names",
+    responses={
+        200: {"description": "List of all voice names and aliases"},
+        500: {"model": ErrorResponse}
+    },
+    summary="List all voice names and aliases",
+    description="Get all available voice names (including aliases) in the library"
+)
+async def list_all_voice_names():
+    """List all voice names and aliases"""
+    try:
+        voice_lib = get_voice_library()
+        all_names = voice_lib.get_all_voice_names()
+        
+        return {
+            "voice_names": all_names,
+            "count": len(all_names)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": {"message": f"Failed to list voice names: {str(e)}", "type": "voice_library_error"}}
+        )
+
+
+@router.post(
+    "/voices/cleanup",
+    responses={
+        200: {"description": "Cleanup completed"},
+        500: {"model": ErrorResponse}
+    },
+    summary="Clean up missing voice files",
+    description="Remove metadata entries for voice files that no longer exist"
+)
+async def cleanup_voices():
+    """Clean up missing voice files from metadata"""
+    try:
+        voice_lib = get_voice_library()
+        removed_voices = voice_lib.cleanup_missing_files()
+        
+        return {
+            "message": "Cleanup completed",
+            "removed_voices": removed_voices,
+            "count": len(removed_voices)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": {"message": f"Failed to cleanup voices: {str(e)}", "type": "voice_library_error"}}
+        )
+
+
+@router.get(
     "/voices/{voice_name}",
     responses={
         200: {"description": "Voice information"},
@@ -599,59 +654,6 @@ async def list_voice_aliases(voice_name: str):
         )
 
 
-@router.get(
-    "/voices/all-names",
-    responses={
-        200: {"description": "List of all voice names and aliases"},
-        500: {"model": ErrorResponse}
-    },
-    summary="List all voice names and aliases",
-    description="Get all available voice names (including aliases) in the library"
-)
-async def list_all_voice_names():
-    """List all voice names and aliases"""
-    try:
-        voice_lib = get_voice_library()
-        all_names = voice_lib.get_all_voice_names()
-        
-        return {
-            "voice_names": all_names,
-            "count": len(all_names)
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": {"message": f"Failed to list voice names: {str(e)}", "type": "voice_library_error"}}
-        )
-
-
-@router.post(
-    "/voices/cleanup",
-    responses={
-        200: {"description": "Cleanup completed"},
-        500: {"model": ErrorResponse}
-    },
-    summary="Clean up missing voice files",
-    description="Remove metadata entries for voice files that no longer exist"
-)
-async def cleanup_voices():
-    """Clean up missing voice files from metadata"""
-    try:
-        voice_lib = get_voice_library()
-        removed_voices = voice_lib.cleanup_missing_files()
-        
-        return {
-            "message": "Cleanup completed",
-            "removed_voices": removed_voices,
-            "count": len(removed_voices)
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": {"message": f"Failed to cleanup voices: {str(e)}", "type": "voice_library_error"}}
-        )
-
 # Export the base router for the main app to use
-__all__ = ["base_router"] 
+__all__ = ["base_router"]
+ 

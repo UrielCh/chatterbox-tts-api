@@ -1,0 +1,12 @@
+{
+  "name": "chatterbox-tts-client",
+  "version": "1.0.0",
+  "description": "TypeScript client library for Chatterbox TTS API, with no external dependencies",
+  "main": "chatterbox-client.ts",
+  "module": "chatterbox-client.ts",
+  "types": "chatterbox-client.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
