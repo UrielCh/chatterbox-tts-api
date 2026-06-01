@@ -54,30 +54,46 @@ async def initialize_model():
             raise FileNotFoundError(f"Voice sample not found: {Config.VOICE_SAMPLE_PATH}")
         
         _initialization_progress = "Configuring device compatibility..."
-        # Patch torch.load for CPU/MPS compatibility if CUDA is not available
-        if _device in ('cpu', 'mps') or not torch.cuda.is_available():
-            import torch
-            original_load = torch.load
-            original_load_file = None
+        # Patch torch.load globally to support device compatibility and weights_only fallback (PyTorch 2.6+)
+        import torch
+        original_load = torch.load
+        original_load_file = None
+        
+        # Try to patch safetensors if available
+        try:
+            import safetensors.torch
+            original_load_file = safetensors.torch.load_file
+        except ImportError:
+            pass
+        
+        force_cpu = _device in ('cpu', 'mps') or not torch.cuda.is_available()
+        
+        def robust_torch_load(f, map_location=None, **kwargs):
+            target_map = 'cpu' if force_cpu else map_location
             
-            # Try to patch safetensors if available
+            # If weights_only is not specified, try True and fallback to False for PyTorch 2.6+
+            if 'weights_only' not in kwargs:
+                try:
+                    return original_load(f, map_location=target_map, weights_only=True, **kwargs)
+                except Exception:
+                    return original_load(f, map_location=target_map, weights_only=False, **kwargs)
+            
+            # If explicitly specified, respect it but fallback on error if set to True
             try:
-                import safetensors.torch
-                original_load_file = safetensors.torch.load_file
-            except ImportError:
-                pass
-            
-            def force_cpu_torch_load(f, map_location=None, **kwargs):
-                # Always force CPU mapping if we're on a CPU device
-                return original_load(f, map_location='cpu', **kwargs)
-            
-            def force_cpu_load_file(filename, device=None):
-                # Force CPU for safetensors loading too
-                return original_load_file(filename, device='cpu')
-            
-            torch.load = force_cpu_torch_load
-            if original_load_file:
-                safetensors.torch.load_file = force_cpu_load_file
+                return original_load(f, map_location=target_map, **kwargs)
+            except Exception as e:
+                if kwargs.get('weights_only') is True:
+                    new_kwargs = kwargs.copy()
+                    new_kwargs['weights_only'] = False
+                    return original_load(f, map_location=target_map, **new_kwargs)
+                raise e
+        
+        def force_cpu_load_file(filename, device=None):
+            return original_load_file(filename, device='cpu')
+        
+        torch.load = robust_torch_load
+        if original_load_file and force_cpu:
+            safetensors.torch.load_file = force_cpu_load_file
         
         # Determine if we should use multilingual model
         use_multilingual = Config.USE_MULTILINGUAL_MODEL
