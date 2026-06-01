@@ -21,6 +21,10 @@ class TTSRequest(BaseModel):
     cfg_weight: Optional[float] = Field(None, description="Pace control", ge=0.0, le=1.0)
     temperature: Optional[float] = Field(None, description="Sampling temperature", ge=0.05, le=5.0)
     
+    # Multilingual TTS parameters
+    language_id: Optional[str] = Field(None, description="Language code (e.g. 'en', 'fr')")
+    language: Optional[str] = Field(None, description="Language code alias (e.g. 'en', 'fr')")
+    
     # Streaming-specific parameters
     streaming_chunk_size: Optional[int] = Field(None, description="Characters per streaming chunk", ge=50, le=500)
     streaming_strategy: Optional[str] = Field(None, description="Chunking strategy for streaming")

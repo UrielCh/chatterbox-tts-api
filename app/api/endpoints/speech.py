@@ -898,7 +898,8 @@ async def text_to_speech(request: TTSRequest):
     """Generate speech from text using Chatterbox TTS with voice selection support"""
     
     # Resolve voice name to file path and language
-    voice_sample_path, language_id = resolve_voice_path_and_language(request.voice)
+    voice_sample_path, voice_language = resolve_voice_path_and_language(request.voice)
+    language_id = request.language_id or request.language or voice_language or "en"
     
     # Check if SSE streaming is requested
     if request.stream_format == "sse":
@@ -1154,7 +1155,8 @@ async def stream_text_to_speech(request: TTSRequest):
         )
     
     # Resolve voice name to file path and language
-    voice_sample_path, language_id = resolve_voice_path_and_language(request.voice)
+    voice_sample_path, voice_language = resolve_voice_path_and_language(request.voice)
+    language_id = request.language_id or request.language or voice_language or "en"
     
     # Create streaming response
     return StreamingResponse(

@@ -16,7 +16,8 @@ async function main() {
     const t0 = Date.now();
     const result1 = await cachedClient.generateSpeechWithWordTimestamps({
       input: text,
-      voice: "alloy"
+      voice: "alloy",
+      language_id: "fr"
     });
     const d1 = Date.now() - t0;
     console.log(`✅ Request 1 finished in ${d1}ms.`);
@@ -30,7 +31,8 @@ async function main() {
     const t1 = Date.now();
     const result2 = await cachedClient.generateSpeechWithWordTimestamps({
       input: text,
-      voice: "alloy"
+      voice: "alloy",
+      language_id: "fr"
     });
     const d2 = Date.now() - t1;
     console.log(`✅ Request 2 finished in ${d2}ms.`);

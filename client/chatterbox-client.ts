@@ -43,6 +43,10 @@ export interface TTSRequest {
   streaming_buffer_size?: number | null;
   /** Speed vs quality trade-off (e.g. fast, balanced, high) */
   streaming_quality?: string | null;
+  /** Language code (e.g. 'en', 'fr', 'es') for multilingual model generation */
+  language_id?: string | null;
+  /** Language code alias (e.g. 'en', 'fr', 'es') for multilingual model generation */
+  language?: string | null;
 }
 
 export interface TTSProgressResponse {
