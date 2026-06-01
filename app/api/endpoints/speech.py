@@ -136,7 +136,7 @@ def resolve_voice_path_and_language(voice_name: Optional[str]) -> tuple[str, str
     """
     # If no voice specified, use default
     if not voice_name:
-        return Config.VOICE_SAMPLE_PATH, "en"
+        return Config.VOICE_SAMPLE_PATH, Config.DEFAULT_LANGUAGE
     
     # Try to resolve from voice library (handles both names and aliases)
     voice_lib = get_voice_library()
@@ -148,13 +148,13 @@ def resolve_voice_path_and_language(voice_name: Optional[str]) -> tuple[str, str
         openai_voices = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
         if voice_name.lower() in openai_voices:
             print(f"🎵 Using default voice for OpenAI voice '{voice_name}' (no alias mapping)")
-            return Config.VOICE_SAMPLE_PATH, "en"
+            return Config.VOICE_SAMPLE_PATH, Config.DEFAULT_LANGUAGE
         
         # Voice not found, fall back to default voice and log a warning
         print(f"⚠️ Warning: Voice '{voice_name}' not found in voice library, using default voice")
-        return Config.VOICE_SAMPLE_PATH, "en"
+        return Config.VOICE_SAMPLE_PATH, Config.DEFAULT_LANGUAGE
     
-    return voice_path, voice_language or "en"
+    return voice_path, voice_language or Config.DEFAULT_LANGUAGE
 
 
 def resolve_voice_path(voice_name: Optional[str]) -> str:

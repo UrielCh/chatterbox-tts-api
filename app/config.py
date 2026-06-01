@@ -28,6 +28,7 @@ class Config:
     
     # Voice and model settings
     VOICE_SAMPLE_PATH = os.getenv('VOICE_SAMPLE_PATH', './voice-sample.mp3')
+    DEFAULT_LANGUAGE = os.getenv('DEFAULT_LANGUAGE', 'en')
     DEVICE_OVERRIDE = os.getenv('DEVICE', 'auto')
     MODEL_CACHE_DIR = os.getenv('MODEL_CACHE_DIR', './models')
     
