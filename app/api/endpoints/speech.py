@@ -356,7 +356,12 @@ async def generate_speech_internal(
         else:
             final_audio_cpu = final_audio
             
-        ta.save(buffer, final_audio_cpu, model.sr, format="wav")
+        # Convert float tensor to PCM 16-bit signed integer for maximum decoder compatibility
+        with torch.no_grad():
+            final_audio_cpu = torch.clamp(final_audio_cpu, -1.0, 1.0)
+            final_audio_int = (final_audio_cpu * 32767).to(torch.int16)
+            
+        ta.save(buffer, final_audio_int, model.sr, format="wav")
         buffer.seek(0)
         
         # Mark as completed
