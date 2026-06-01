@@ -7,8 +7,9 @@ async function main() {
     cacheDir: "./tts-cache"
   });
 
-  const text = "Testing the disk caching layer with word timestamps.";
-  
+  // const text = "Testing the disk caching layer with word timestamps.";
+  const text = "Test de la couche de mise en cache sur disque avec des horodatages de mots.";
+
   try {
     // 1. First run - should generate and cache
     console.log(`\n🔊 Request 1: Generating speech for "${text}"...`);
@@ -23,7 +24,7 @@ async function main() {
     console.log(`- Audio File: ${result1.cache.audioPath}`);
     console.log(`- Metadata File: ${result1.cache.metadataPath}`);
     console.log(`- Duration: ${result1.duration_seconds}s`);
-    
+
     // 2. Second run - should hit the cache instantly
     console.log(`\n🔊 Request 2: Requesting same text...`);
     const t1 = Date.now();
