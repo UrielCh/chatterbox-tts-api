@@ -6,6 +6,7 @@ A fully-typed, zero-dependency TypeScript client for the Chatterbox TTS API, opt
 
 - **Zero External Dependencies**: Uses native standard `fetch`, `ReadableStream`, and standard web platform APIs.
 - **Fully Typed**: Exhaustive TypeScript type definitions for all requests, responses, jobs, and SSE streams.
+- **Optional Disk Cache Layer**: Node/Bun wrapper that stores timestamped generations as a WAV file plus JSON metadata.
 - **Background Job Management**: Methods for managing long text queue processing, including status checking, bulk pausing/resuming, and downloading output audio.
 - **OpenAI-Compatible Streaming**: Full support for real-time text-to-speech streams via Server-Side Events (SSE).
 - **Voice Library Controls**: Manage voices, default voice configurations, and voice aliases seamlessly.
@@ -45,7 +46,43 @@ const audioBlob = await client.generateSpeech({
 await Bun.write("output.wav", audioBlob);
 ```
 
-### 3. Real-Time SSE Streaming
+### 3. Disk-Cached Word Timestamps
+
+For Node/Bun processes that need reusable WhisperX word timings, use the disk-cache wrapper:
+
+```typescript
+import { ChatterboxDiskCache } from "./chatterbox-disk-cache";
+
+const cachedClient = new ChatterboxDiskCache({
+  baseUrl: "http://localhost:4123",
+  cacheDir: "./tts-cache"
+});
+
+const result = await cachedClient.generateSpeechWithWordTimestamps({
+  input: "Cache this generation and keep every word timing.",
+  voice: "alloy"
+});
+
+console.log(result.cache.hit ? "Loaded from cache" : "Generated");
+console.log(result.cache.audioPath);
+console.log(result.cache.metadataPath);
+console.log(result.metadata.generated_at);
+console.log(result.word_timestamps.words);
+```
+
+Each cached result is stored as exactly two files:
+
+```text
+tts-cache/
+  <crockford-base32-value-0-31>/
+    <crockford-base32-value-0-31>/
+      <full-crockford-base32-sha256-key>.wav
+      <full-crockford-base32-sha256-key>.json
+```
+
+The `.wav` file contains only the audio binary. The `.json` file contains the original text, normalized request, generation timestamp, audio metadata, audio checksum, and WhisperX word timestamps.
+
+### 4. Real-Time SSE Streaming
 
 ```typescript
 // Uses OpenAI-compatible Server-Side Events to stream raw PCM/Base64 audio chunks
@@ -60,7 +97,7 @@ for await (const chunk of client.generateSpeechSSE({
 }
 ```
 
-### 4. Background Long-Text Jobs
+### 5. Background Long-Text Jobs
 
 For processing long articles or documents asynchronously in the background:
 
@@ -89,12 +126,18 @@ The `ChatterboxClient` exposes the following method categories:
 
 1. **Speech Operations**:
    - `generateSpeech(request)`: Returns standard non-streaming WAV Blob.
+   - `generateSpeechWithWordTimestamps(request)`: Returns base64 WAV audio plus WhisperX word-level start/end timings.
    - `generateSpeechStream(request)`: Returns a Web Standard `ReadableStream` of raw chunk bytes.
    - `generateSpeechSSE(request)`: Async generator yielding SSE stream events (`SSEAudioInfo`, `SSEAudioDelta`, `SSEAudioDone`).
    - `generateSpeechWithUpload(request)`: Custom voice cloning via uploading a sound file.
    - `generateSpeechStreamWithUpload(request)`: Real-time streaming voice cloning via uploading a sound file.
 
-2. **Long Text Background Jobs**:
+2. **Disk Cache Layer**:
+   - `new ChatterboxDiskCache(options)`: Wraps a `ChatterboxClient` or constructs one from the same client options.
+   - `generateSpeechWithWordTimestamps(request, { refresh })`: Returns timestamped speech and caches it on disk as one WAV file and one JSON file.
+   - `getCachePaths(request)`: Returns the deterministic two-layer Crockford-base32 cache location for a request.
+
+3. **Long Text Background Jobs**:
    - `createLongTextJob(request)`: Submits long text job to background queue.
    - `listLongTextJobs(params)`: List background job queue.
    - `getLongTextJobStatus(jobId)`: Gets current job state.
@@ -108,7 +151,7 @@ The `ChatterboxClient` exposes the following method categories:
    - `listLongTextHistory(params)` / `getLongTextHistoryStats()` / `clearLongTextHistory()`: Manage queue history logs.
    - `bulkLongTextAction(action)`: Cancel, pause, resume, retry, or delete multiple jobs at once.
 
-3. **Voice Library Management**:
+4. **Voice Library Management**:
    - `listVoices(params)` / `listAllVoiceNames()`: List available voices.
    - `uploadVoice(name, file, language)`: Upload audio file for voice cloning.
    - `getDefaultVoice()` / `setDefaultVoice(name)` / `resetDefaultVoice()`: Manage system defaults.
@@ -116,7 +159,7 @@ The `ChatterboxClient` exposes the following method categories:
    - `addVoiceAlias(name, alias)` / `listVoiceAliases(name)` / `removeVoiceAlias(name, alias)`: Set alternative names.
    - `cleanupVoices()`: Prune missing files from database.
 
-4. **System Metrics & Config**:
+5. **System Metrics & Config**:
    - `getLanguages()`: Supported multilingual model languages.
    - `getModels()`: Returns OpenAI-compatible virtual models list.
    - `getConfig()`: Get current server parameters.
