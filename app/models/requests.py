@@ -14,6 +14,7 @@ class TTSRequest(BaseModel):
     response_format: Optional[str] = Field("wav", description="Audio format (always returns WAV)")
     speed: Optional[float] = Field(1.0, description="Speed of speech (ignored)")
     stream_format: Optional[str] = Field("audio", description="Streaming format: 'audio' for raw audio stream, 'sse' for Server-Side Events")
+    word_timestamps: Optional[bool] = Field(False, description="Return generated audio with WhisperX word-level start/end timings")
     
     # Custom TTS parameters
     exaggeration: Optional[float] = Field(None, description="Emotion intensity", ge=0.25, le=2.0)

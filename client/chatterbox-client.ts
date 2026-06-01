@@ -27,6 +27,8 @@ export interface TTSRequest {
   speed?: number | null;
   /** Streaming format: "audio" for raw audio stream, "sse" for Server-Side Events */
   stream_format?: string | null;
+  /** Return generated audio with WhisperX word-level start/end timings */
+  word_timestamps?: boolean | null;
   /** Emotion intensity (0.25 to 2.0) */
   exaggeration?: number | null;
   /** Pace control (0.0 to 1.0) */
@@ -166,6 +168,17 @@ export interface LongTextJobList {
   offset: number;
 }
 
+export interface LongTextProgress {
+  job_id: string;
+  status: string;
+  progress?: number | null;
+  current_chunk?: number | null;
+  total_chunks?: number | null;
+  message?: string | null;
+  error?: string | null;
+  [key: string]: any;
+}
+
 export interface LongTextJobDetails {
   job_id: string;
   status: string;
@@ -294,6 +307,35 @@ export interface SSEAudioInfo {
   bits_per_sample: number;
 }
 
+export interface WordTimestamp {
+  word: string;
+  start?: number | null;
+  end?: number | null;
+  segment_index: number;
+  score?: number | null;
+}
+
+export interface WordTimestampsInfo {
+  language: string;
+  transcript: string;
+  words: WordTimestamp[];
+  segments: Array<Record<string, any>>;
+}
+
+export interface SSEWordTimestamps extends WordTimestampsInfo {
+  type: "speech.audio.word_timestamps";
+}
+
+export interface TTSWithTimestampsResponse {
+  audio: string;
+  audio_format: "wav";
+  sample_rate: number;
+  channels: number;
+  bits_per_sample: number;
+  duration_seconds: number;
+  word_timestamps: WordTimestampsInfo;
+}
+
 export interface VoiceNamesListResponse {
   voice_names: string[];
   count: number;
@@ -368,6 +410,17 @@ export class ChatterboxClient {
   }
 
   /**
+   * Generate speech and return base64 WAV audio plus WhisperX word timestamps.
+   */
+  async generateSpeechWithWordTimestamps(request: TTSRequest): Promise<TTSWithTimestampsResponse> {
+    return this.request<TTSWithTimestampsResponse>("/audio/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...request, stream_format: null, word_timestamps: true }),
+    });
+  }
+
+  /**
    * Generate speech audio stream. Returns a Web standard ReadableStream containing raw chunks.
    */
   async generateSpeechStream(request: TTSRequest): Promise<ReadableStream<Uint8Array>> {
@@ -400,7 +453,7 @@ export class ChatterboxClient {
    * OpenAI compatible endpoint that parses Server-Side Events (SSE) for streaming.
    * Yields Base64 audio segments, info parameters, or usage info.
    */
-  async *generateSpeechSSE(request: TTSRequest): AsyncGenerator<SSEAudioDelta | SSEAudioInfo | SSEAudioDone, void, unknown> {
+  async *generateSpeechSSE(request: TTSRequest): AsyncGenerator<SSEAudioDelta | SSEAudioInfo | SSEAudioDone | SSEWordTimestamps, void, unknown> {
     const url = `${this.baseUrl}/audio/speech`;
     const headers = new Headers();
     if (this.apiKey) {
@@ -474,6 +527,7 @@ export class ChatterboxClient {
       "streaming_chunk_size",
       "streaming_strategy",
       "streaming_quality",
+      "word_timestamps",
     ];
 
     for (const key of optionalKeys) {

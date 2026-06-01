@@ -21,6 +21,9 @@ dependencies = [
   "requests>=2.28.0",
   "sse-starlette>=3.0.2",
   "pydub>=0.25.1",
+  # Newer WhisperX releases require torch~=2.8.0, which conflicts with the
+  # current Chatterbox torch compatibility range.
+  "whisperx==3.3.1",
   "setuptools<70",
 ]
 

@@ -11,11 +11,12 @@ import torchaudio as ta
 import base64
 import json
 import struct
+import wave
 from typing import Optional, List, Dict, Any, AsyncGenerator
 from fastapi import APIRouter, HTTPException, status, Form, File, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.models import TTSRequest, ErrorResponse, SSEAudioDelta, SSEAudioDone, SSEUsageInfo, SSEAudioInfo
+from app.models import TTSRequest, ErrorResponse, SSEAudioDelta, SSEAudioDone, SSEUsageInfo, SSEAudioInfo, SSEWordTimestamps
 from app.config import Config
 from app.core import (
     get_memory_info, cleanup_memory, safe_delete_tensors,
@@ -24,6 +25,7 @@ from app.core import (
 )
 from app.core.tts_model import get_model, is_multilingual
 from app.core.text_processing import split_text_for_streaming, get_streaming_settings
+from app.core.word_timestamps import WordTimestampError, extract_word_timestamps_from_wav_bytes
 
 # Create router with aliasing support
 base_router = APIRouter()
@@ -57,6 +59,69 @@ def create_wav_header(sample_rate: int, channels: int, bits_per_sample: int, dat
     header.write(b'data')
     header.write(struct.pack('<I', data_size)) # Subchunk2Size
     return header.getvalue()
+
+
+def create_wav_bytes_from_pcm(
+    pcm_chunks: List[bytes],
+    sample_rate: int,
+    channels: int,
+    bits_per_sample: int
+) -> bytes:
+    """Create a complete WAV file from raw PCM chunks."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(bits_per_sample // 8)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(pcm_chunks))
+    return buffer.getvalue()
+
+
+def get_wav_metadata(wav_bytes: bytes) -> Dict[str, Any]:
+    """Read basic WAV metadata from in-memory audio."""
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+        frames = wav_file.getnframes()
+        sample_rate = wav_file.getframerate()
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+
+    return {
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "bits_per_sample": sample_width * 8,
+        "duration_seconds": frames / sample_rate if sample_rate else 0.0,
+    }
+
+
+async def build_tts_with_timestamps_response(
+    wav_bytes: bytes,
+    language_id: str,
+) -> JSONResponse:
+    """Run WhisperX after generation and return audio plus word timings as JSON."""
+    try:
+        loop = asyncio.get_event_loop()
+        timestamp_info = await loop.run_in_executor(
+            None,
+            lambda: extract_word_timestamps_from_wav_bytes(wav_bytes, language_hint=language_id)
+        )
+        metadata = get_wav_metadata(wav_bytes)
+
+        return JSONResponse({
+            "audio": base64.b64encode(wav_bytes).decode("utf-8"),
+            "audio_format": "wav",
+            **metadata,
+            "word_timestamps": timestamp_info,
+        })
+    except WordTimestampError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "message": str(e),
+                    "type": "word_timestamp_error"
+                }
+            }
+        )
 
 
 def resolve_voice_path_and_language(voice_name: Optional[str]) -> tuple[str, str]:
@@ -564,7 +629,8 @@ async def generate_speech_sse(
     temperature: Optional[float] = None,
     streaming_chunk_size: Optional[int] = None,
     streaming_strategy: Optional[str] = None,
-    streaming_quality: Optional[str] = None
+    streaming_quality: Optional[str] = None,
+    word_timestamps: bool = False
 ) -> AsyncGenerator[str, None]:
     """Generate Server-Side Events for speech streaming (OpenAI compatible format)"""
     global REQUEST_COUNTER
@@ -584,7 +650,8 @@ async def generate_speech_sse(
             "streaming_format": "sse",
             "streaming_chunk_size": streaming_chunk_size,
             "streaming_strategy": streaming_strategy,
-            "streaming_quality": streaming_quality
+            "streaming_quality": streaming_quality,
+            "word_timestamps": word_timestamps
         }
     )
     
@@ -675,6 +742,7 @@ async def generate_speech_sse(
         
         # Generate and stream audio for each chunk as SSE events
         loop = asyncio.get_event_loop()
+        pcm_chunks_for_timestamps: List[bytes] = []
         
         for i, chunk in enumerate(chunks):
             # Update progress
@@ -710,6 +778,8 @@ async def generate_speech_sse(
                 
                 # Base64 encode the raw PCM data
                 audio_base64 = base64.b64encode(pcm_data).decode('utf-8')
+                if word_timestamps:
+                    pcm_chunks_for_timestamps.append(pcm_data)
                 
                 # Create SSE event for this audio chunk
                 sse_event = SSEAudioDelta(audio=audio_base64)
@@ -734,6 +804,34 @@ async def generate_speech_sse(
         # Send completion event
         total_output_tokens = total_audio_chunks * 50  # Rough estimate
         total_tokens = total_input_tokens + total_output_tokens
+
+        if word_timestamps:
+            update_tts_status(request_id, TTSStatus.FINALIZING, "Extracting WhisperX word timestamps")
+            wav_bytes = create_wav_bytes_from_pcm(
+                pcm_chunks_for_timestamps,
+                sample_rate=sample_rate,
+                channels=channels,
+                bits_per_sample=bits_per_sample
+            )
+            try:
+                timestamp_info = await loop.run_in_executor(
+                    None,
+                    lambda: extract_word_timestamps_from_wav_bytes(wav_bytes, language_hint=language_id)
+                )
+            except WordTimestampError as e:
+                update_tts_status(request_id, TTSStatus.ERROR, error_message=str(e))
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={
+                        "error": {
+                            "message": str(e),
+                            "type": "word_timestamp_error"
+                        }
+                    }
+                )
+
+            timestamp_event = SSEWordTimestamps(**timestamp_info)
+            yield f"data: {timestamp_event.model_dump_json()}\n\n"
         
         usage_info = SSEUsageInfo(
             input_tokens=total_input_tokens,
@@ -783,7 +881,7 @@ async def generate_speech_sse(
     "/audio/speech",
     response_class=StreamingResponse,
     responses={
-        200: {"content": {"audio/wav": {}, "text/event-stream": {}}},
+        200: {"content": {"audio/wav": {}, "text/event-stream": {}, "application/json": {}}},
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         500: {"model": ErrorResponse}
@@ -810,7 +908,8 @@ async def text_to_speech(request: TTSRequest):
                 temperature=request.temperature,
                 streaming_chunk_size=request.streaming_chunk_size,
                 streaming_strategy=request.streaming_strategy,
-                streaming_quality=request.streaming_quality
+                streaming_quality=request.streaming_quality,
+                word_timestamps=bool(request.word_timestamps)
             ),
             media_type="text/event-stream",
             headers={
@@ -829,6 +928,12 @@ async def text_to_speech(request: TTSRequest):
             cfg_weight=request.cfg_weight,
             temperature=request.temperature
         )
+
+        if request.word_timestamps:
+            return await build_tts_with_timestamps_response(
+                wav_bytes=buffer.getvalue(),
+                language_id=language_id
+            )
         
         # Create response
         response = StreamingResponse(
@@ -844,7 +949,7 @@ async def text_to_speech(request: TTSRequest):
     "/audio/speech/upload",
     response_class=StreamingResponse,
     responses={
-        200: {"content": {"audio/wav": {}, "text/event-stream": {}}},
+        200: {"content": {"audio/wav": {}, "text/event-stream": {}, "application/json": {}}},
         400: {"model": ErrorResponse},
         500: {"model": ErrorResponse}
     },
@@ -857,6 +962,7 @@ async def text_to_speech_with_upload(
     response_format: Optional[str] = Form("wav", description="Audio format (always returns WAV)"),
     speed: Optional[float] = Form(1.0, description="Speed of speech (ignored)"),
     stream_format: Optional[str] = Form("audio", description="Streaming format: 'audio' for raw audio stream, 'sse' for Server-Side Events"),
+    word_timestamps: Optional[bool] = Form(False, description="Return generated audio with WhisperX word-level start/end timings"),
     exaggeration: Optional[float] = Form(None, description="Emotion intensity (0.25-2.0)", ge=0.25, le=2.0),
     cfg_weight: Optional[float] = Form(None, description="Pace control (0.0-1.0)", ge=0.0, le=1.0),
     temperature: Optional[float] = Form(None, description="Sampling temperature (0.05-5.0)", ge=0.05, le=5.0),
@@ -958,7 +1064,8 @@ async def text_to_speech_with_upload(
                         temperature=temperature,
                         streaming_chunk_size=streaming_chunk_size,
                         streaming_strategy=streaming_strategy,
-                        streaming_quality=streaming_quality
+                        streaming_quality=streaming_quality,
+                        word_timestamps=bool(word_timestamps)
                     ):
                         yield sse_event
                 finally:
@@ -990,6 +1097,12 @@ async def text_to_speech_with_upload(
                 cfg_weight=cfg_weight,
                 temperature=temperature
             )
+
+            if word_timestamps:
+                return await build_tts_with_timestamps_response(
+                    wav_bytes=buffer.getvalue(),
+                    language_id=language_id
+                )
             
             # Create response
             response = StreamingResponse(
@@ -1024,6 +1137,16 @@ async def text_to_speech_with_upload(
 )
 async def stream_text_to_speech(request: TTSRequest):
     """Stream speech generation from text using Chatterbox TTS with voice selection support"""
+    if request.word_timestamps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "message": "word_timestamps is only supported by /audio/speech with stream_format='audio' or 'sse'",
+                    "type": "invalid_request_error"
+                }
+            }
+        )
     
     # Resolve voice name to file path and language
     voice_sample_path, language_id = resolve_voice_path_and_language(request.voice)
@@ -1073,9 +1196,20 @@ async def stream_text_to_speech_with_upload(
     streaming_chunk_size: Optional[int] = Form(None, description="Characters per streaming chunk (50-500)", ge=50, le=500),
     streaming_strategy: Optional[str] = Form(None, description="Chunking strategy (sentence, paragraph, fixed, word)"),
     streaming_quality: Optional[str] = Form(None, description="Quality preset (fast, balanced, high)"),
+    word_timestamps: Optional[bool] = Form(False, description="Not supported by raw streaming responses"),
     voice_file: Optional[UploadFile] = File(None, description="Optional voice sample file for custom voice cloning")
 ):
     """Stream speech generation from text using Chatterbox TTS with optional voice file upload"""
+    if word_timestamps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "message": "word_timestamps is only supported by /audio/speech/upload with stream_format='audio' or 'sse'",
+                    "type": "invalid_request_error"
+                }
+            }
+        )
     
     # Validate input text
     if not input or not input.strip():

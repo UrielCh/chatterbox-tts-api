@@ -44,6 +44,12 @@ class Config:
 
     # Multilingual model settings
     USE_MULTILINGUAL_MODEL = os.getenv('USE_MULTILINGUAL_MODEL', 'true').lower() == 'true'
+
+    # WhisperX word timestamp extraction settings
+    WHISPERX_MODEL = os.getenv('WHISPERX_MODEL', 'base')
+    WHISPERX_DEVICE = os.getenv('WHISPERX_DEVICE', 'auto')
+    WHISPERX_COMPUTE_TYPE = os.getenv('WHISPERX_COMPUTE_TYPE', 'auto')
+    WHISPERX_BATCH_SIZE = int(os.getenv('WHISPERX_BATCH_SIZE', 16))
     
     # Memory management settings
     MEMORY_CLEANUP_INTERVAL = int(os.getenv('MEMORY_CLEANUP_INTERVAL', 5))
@@ -82,6 +88,8 @@ class Config:
             raise ValueError(f"LONG_TEXT_JOB_RETENTION_DAYS must be positive, got {cls.LONG_TEXT_JOB_RETENTION_DAYS}")
         if cls.LONG_TEXT_MAX_CONCURRENT_JOBS <= 0:
             raise ValueError(f"LONG_TEXT_MAX_CONCURRENT_JOBS must be positive, got {cls.LONG_TEXT_MAX_CONCURRENT_JOBS}")
+        if cls.WHISPERX_BATCH_SIZE <= 0:
+            raise ValueError(f"WHISPERX_BATCH_SIZE must be positive, got {cls.WHISPERX_BATCH_SIZE}")
 
 
 def detect_device():

@@ -7,6 +7,7 @@ export interface TTSRequest {
   voice_file?: File;
   session_id?: string;
   stream_format?: 'audio' | 'sse';
+  word_timestamps?: boolean;
   streaming_chunk_size?: number;
   streaming_strategy?: 'sentence' | 'paragraph' | 'fixed' | 'word';
   streaming_quality?: 'fast' | 'balanced' | 'high';
@@ -204,7 +205,36 @@ export interface SSEAudioDone {
   };
 }
 
-export type SSEEvent = SSEAudioInfo | SSEAudioDelta | SSEAudioDone;
+export interface WordTimestamp {
+  word: string;
+  start?: number | null;
+  end?: number | null;
+  segment_index: number;
+  score?: number | null;
+}
+
+export interface WordTimestampsInfo {
+  language: string;
+  transcript: string;
+  words: WordTimestamp[];
+  segments: Array<Record<string, unknown>>;
+}
+
+export interface SSEWordTimestamps extends WordTimestampsInfo {
+  type: 'speech.audio.word_timestamps';
+}
+
+export interface TTSWithTimestampsResponse {
+  audio: string;
+  audio_format: 'wav';
+  sample_rate: number;
+  channels: number;
+  bits_per_sample: number;
+  duration_seconds: number;
+  word_timestamps: WordTimestampsInfo;
+}
+
+export type SSEEvent = SSEAudioInfo | SSEAudioDelta | SSEAudioDone | SSEWordTimestamps;
 
 export interface StreamingProgress {
   chunksReceived: number;

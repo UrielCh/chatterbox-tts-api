@@ -29,5 +29,10 @@ psutil>=5.9.0
 # Audio processing for long text concatenation
 pydub>=0.25.1
 
+# Word-level timestamp extraction after TTS generation.
+# Newer WhisperX releases require torch~=2.8.0, which conflicts with this
+# project's current torch<2.7.0 compatibility range.
+whisperx==3.3.1
+
 # Testing Dependencies
 requests>=2.28.0 

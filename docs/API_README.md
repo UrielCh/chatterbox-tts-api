@@ -102,7 +102,8 @@ Generate speech from text using the Chatterbox TTS model.
   "speed": 1.0, // Ignored - use model's built-in parameters
   "exaggeration": 0.7, // Optional - override default (0.25-2.0)
   "cfg_weight": 0.4, // Optional - override default (0.0-1.0)
-  "temperature": 0.9 // Optional - override default (0.05-5.0)
+  "temperature": 0.9, // Optional - override default (0.05-5.0)
+  "word_timestamps": false // Optional - return JSON with WhisperX word timings
 }
 ```
 
@@ -112,11 +113,13 @@ Generate speech from text using the Chatterbox TTS model.
 - `exaggeration`: Optional, 0.25-2.0 range validation
 - `cfg_weight`: Optional, 0.0-1.0 range validation
 - `temperature`: Optional, 0.05-5.0 range validation
+- `word_timestamps`: Optional, runs WhisperX after audio generation and returns word-level `start`/`end` timings
 
 **Response:**
 
 - Content-Type: `audio/wav`
 - Binary audio data in WAV format via StreamingResponse
+- If `word_timestamps` is `true`: Content-Type `application/json` with base64 WAV audio and `word_timestamps.words`
 
 **Example:**
 
@@ -135,6 +138,16 @@ curl -X POST http://localhost:4123/v1/audio/speech \
   -d '{"input": "Dramatic speech!", "exaggeration": 1.2, "cfg_weight": 0.3}' \
   --output dramatic.wav
 ```
+
+**With WhisperX word timestamps:**
+
+```bash
+curl -X POST http://localhost:4123/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Hello with precise word timing.", "word_timestamps": true}'
+```
+
+The JSON response contains `audio` as base64 WAV and `word_timestamps.words`, where each item includes `word`, `start`, `end`, `segment_index`, and optional WhisperX alignment `score`.
 
 **Using a voice from the voice library:**
 

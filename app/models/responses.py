@@ -83,6 +83,47 @@ class SSEAudioDone(BaseModel):
     usage: SSEUsageInfo
 
 
+class WordTimestamp(BaseModel):
+    """Single aligned word timing returned by WhisperX"""
+
+    word: str
+    start: Optional[float] = None
+    end: Optional[float] = None
+    segment_index: int
+    score: Optional[float] = None
+
+
+class WordTimestampsInfo(BaseModel):
+    """Generated audio word timing metadata"""
+
+    language: str
+    transcript: str
+    words: List[WordTimestamp]
+    segments: List[Dict[str, Any]]
+
+
+class SSEWordTimestamps(BaseModel):
+    """SSE word timestamp event model"""
+
+    type: str = "speech.audio.word_timestamps"
+    language: str
+    transcript: str
+    words: List[WordTimestamp]
+    segments: List[Dict[str, Any]]
+
+
+class TTSWithTimestampsResponse(BaseModel):
+    """JSON response containing generated audio and word timings"""
+
+    audio: str
+    audio_format: str = "wav"
+    sample_rate: int
+    channels: int
+    bits_per_sample: int
+    duration_seconds: float
+    word_timestamps: WordTimestampsInfo
+
+
 class TTSProgressResponse(BaseModel):
     """TTS progress response model"""
     

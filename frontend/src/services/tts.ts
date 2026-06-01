@@ -26,6 +26,10 @@ export const createTTSService = (baseUrl: string, sessionId?: string) => ({
       formData.append('voice_file', request.voice_file);
     }
 
+    if (request.word_timestamps !== undefined) {
+      formData.append('word_timestamps', String(request.word_timestamps));
+    }
+
     // Add session ID for tracking
     if (sessionId) {
       formData.append('session_id', sessionId);

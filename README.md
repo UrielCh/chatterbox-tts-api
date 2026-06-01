@@ -701,6 +701,12 @@ docker compose -f docker/docker-compose.gpu.yml up -d
 - `audio`: Raw audio streaming (default)
 - `sse`: Server-Side Events with base64-encoded audio chunks (OpenAI compatible)
 
+**Word Timestamps**
+
+- Set `word_timestamps: true` on `/v1/audio/speech` to run WhisperX after generation completes.
+- Non-streaming responses return JSON with base64 WAV audio and per-word `start`/`end` timings.
+- SSE responses emit a final `speech.audio.word_timestamps` event before `speech.audio.done`.
+
 </details>
 
 <details>
