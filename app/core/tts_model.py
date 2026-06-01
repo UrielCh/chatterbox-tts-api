@@ -6,6 +6,29 @@ import os
 import asyncio
 from enum import Enum
 from typing import Optional, Dict, Any
+
+# Register safe globals for PyTorch 2.6+ to support OmegaConf models like WhisperX
+try:
+    import torch
+    if hasattr(torch, "serialization") and hasattr(torch.serialization, "add_safe_globals"):
+        try:
+            from omegaconf.listconfig import ListConfig
+            torch.serialization.add_safe_globals([ListConfig])
+        except ImportError:
+            pass
+        try:
+            from omegaconf.dictconfig import DictConfig
+            torch.serialization.add_safe_globals([DictConfig])
+        except ImportError:
+            pass
+        try:
+            from omegaconf.nodes import AnyNode
+            torch.serialization.add_safe_globals([AnyNode])
+        except ImportError:
+            pass
+except Exception:
+    pass
+
 from chatterbox.tts import ChatterboxTTS
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 from app.core.mtl import SUPPORTED_LANGUAGES
