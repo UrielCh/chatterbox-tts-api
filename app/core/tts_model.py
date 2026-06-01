@@ -26,6 +26,62 @@ try:
             torch.serialization.add_safe_globals([AnyNode])
         except ImportError:
             pass
+        try:
+            from omegaconf.base import ContainerMetadata
+            torch.serialization.add_safe_globals([ContainerMetadata])
+        except ImportError:
+            pass
+except Exception:
+    pass
+
+# Patch torch.load globally at import time so third party imports also get the patched version
+try:
+    import torch
+    if not hasattr(torch, "_original_load_patched"):
+        original_load = torch.load
+        torch._original_load_patched = original_load
+        
+        def robust_torch_load(f, map_location=None, **kwargs):
+            print(f"[DEBUG PATCH] robust_torch_load called for: {f}, kwargs: {kwargs}", flush=True)
+            # Check dynamically if we should force CPU mapping
+            force_cpu = False
+            try:
+                from app.core.tts_model import get_device
+                from app.config import detect_device
+                dev = get_device() or detect_device()
+                force_cpu = dev in ('cpu', 'mps') or not torch.cuda.is_available()
+            except Exception:
+                pass
+            
+            target_map = 'cpu' if force_cpu else map_location
+            
+            # Try to load using the passed kwargs
+            try:
+                if "weights_only" not in kwargs:
+                    return original_load(f, map_location=target_map, weights_only=True, **kwargs)
+                return original_load(f, map_location=target_map, **kwargs)
+            except Exception as e:
+                # Fallback to weights_only=False if not explicitly False
+                if kwargs.get("weights_only") is not False:
+                    print(f"[DEBUG PATCH] Falling back to weights_only=False for {f}", flush=True)
+                    # Reset the file stream if it has been partially read
+                    try:
+                        if hasattr(f, "seek"):
+                            f.seek(0)
+                    except Exception as seek_err:
+                        print(f"[DEBUG PATCH] Failed to seek(0) on file object: {seek_err}", flush=True)
+                    
+                    new_kwargs = kwargs.copy()
+                    new_kwargs["weights_only"] = False
+                    return original_load(f, map_location=target_map, **new_kwargs)
+                raise e
+                
+        torch.load = robust_torch_load
+        try:
+            import torch.serialization
+            torch.serialization.load = robust_torch_load
+        except Exception:
+            pass
 except Exception:
     pass
 
@@ -77,46 +133,17 @@ async def initialize_model():
             raise FileNotFoundError(f"Voice sample not found: {Config.VOICE_SAMPLE_PATH}")
         
         _initialization_progress = "Configuring device compatibility..."
-        # Patch torch.load globally to support device compatibility and weights_only fallback (PyTorch 2.6+)
-        import torch
-        original_load = torch.load
-        original_load_file = None
-        
-        # Try to patch safetensors if available
+        # Safetensors device mapping
         try:
             import safetensors.torch
             original_load_file = safetensors.torch.load_file
+            force_cpu = _device in ('cpu', 'mps') or not torch.cuda.is_available()
+            if force_cpu:
+                def force_cpu_load_file(filename, device=None):
+                    return original_load_file(filename, device='cpu')
+                safetensors.torch.load_file = force_cpu_load_file
         except ImportError:
             pass
-        
-        force_cpu = _device in ('cpu', 'mps') or not torch.cuda.is_available()
-        
-        def robust_torch_load(f, map_location=None, **kwargs):
-            target_map = 'cpu' if force_cpu else map_location
-            
-            # If weights_only is not specified, try True and fallback to False for PyTorch 2.6+
-            if 'weights_only' not in kwargs:
-                try:
-                    return original_load(f, map_location=target_map, weights_only=True, **kwargs)
-                except Exception:
-                    return original_load(f, map_location=target_map, weights_only=False, **kwargs)
-            
-            # If explicitly specified, respect it but fallback on error if set to True
-            try:
-                return original_load(f, map_location=target_map, **kwargs)
-            except Exception as e:
-                if kwargs.get('weights_only') is True:
-                    new_kwargs = kwargs.copy()
-                    new_kwargs['weights_only'] = False
-                    return original_load(f, map_location=target_map, **new_kwargs)
-                raise e
-        
-        def force_cpu_load_file(filename, device=None):
-            return original_load_file(filename, device='cpu')
-        
-        torch.load = robust_torch_load
-        if original_load_file and force_cpu:
-            safetensors.torch.load_file = force_cpu_load_file
         
         # Determine if we should use multilingual model
         use_multilingual = Config.USE_MULTILINGUAL_MODEL

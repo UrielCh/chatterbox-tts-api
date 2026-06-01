@@ -2,6 +2,9 @@
 Main FastAPI application
 """
 
+# Absolute first import to apply global patches (such as torch.load under PyTorch 2.6+)
+import app.core.tts_model
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
