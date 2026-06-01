@@ -8,16 +8,15 @@ async function main() {
   });
 
   // const text = "Testing the disk caching layer with word timestamps.";
-  const text = "Test de la couche de mise en cache sur disque avec des horodatages de mots.";
+  const message = { input: "Test de la couche de mise en cache sur disque avec des horodatages de mots.", language_id: "fr" } as const;
 
   try {
     // 1. First run - should generate and cache
-    console.log(`\n🔊 Request 1: Generating speech for "${text}"...`);
+    console.log(`\n🔊 Request 1: Generating speech for "${message.input}"...`);
     const t0 = Date.now();
     const result1 = await cachedClient.generateSpeechWithWordTimestamps({
-      input: text,
+      ...message,
       voice: "alloy",
-      language_id: "fr"
     });
     const d1 = Date.now() - t0;
     console.log(`✅ Request 1 finished in ${d1}ms.`);
@@ -30,9 +29,8 @@ async function main() {
     console.log(`\n🔊 Request 2: Requesting same text...`);
     const t1 = Date.now();
     const result2 = await cachedClient.generateSpeechWithWordTimestamps({
-      input: text,
+      ...message,
       voice: "alloy",
-      language_id: "fr"
     });
     const d2 = Date.now() - t1;
     console.log(`✅ Request 2 finished in ${d2}ms.`);

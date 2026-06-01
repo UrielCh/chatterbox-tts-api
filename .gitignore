@@ -106,3 +106,5 @@ CLAUDE.md
 
 data/
 client/package-lock.json
+client/tts-cache/
+tts-cache/
